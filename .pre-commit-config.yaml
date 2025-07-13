@@ -1,0 +1,26 @@
+# See https://pre-commit.com for more information
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v3.2.0
+  hooks:
+    - id: trailing-whitespace
+    - id: end-of-file-fixer
+    - id: check-toml
+    - id: check-added-large-files
+- repo: local
+  hooks:
+    - id: cargo_fmt
+      name: Cargo fmt
+      entry: cargo fmt
+      args: ['--']
+      language: system
+      types: [rust]
+    - id: cargo_clippy
+      name: Cargo clippy
+      entry: cargo clippy
+      # Add -Dwarnings to force clippy exit with nonzero code when it encounters
+      # warnings.
+      args: ['--', '-Dwarnings']
+      pass_filenames: false
+      language: system
+      types: [rust]
