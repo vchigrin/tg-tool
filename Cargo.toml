@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.5.41", features = ["derive"] }
 eyre = "0.6.12"
+grammers-client = "0.7.0"
+tokio = { version = "1.46.1", features = ["rt", "macros"] }
