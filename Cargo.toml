@@ -1,0 +1,6 @@
+[package]
+name = "tg-tool"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
