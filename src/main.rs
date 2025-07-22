@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use eyre::Result;
 use std::path;
 mod commands;
+mod serialization;
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Tool for command-line interaction with Telegram")]
@@ -26,6 +27,22 @@ enum FoldersCommand {
     Restore { src_file_path: path::PathBuf },
 }
 
+fn handle_folders_command(
+    tokio_rt: &tokio::runtime::Runtime,
+    session_file: &path::Path,
+    folders_cmd: FoldersCommand,
+) -> Result<()> {
+    match folders_cmd {
+        FoldersCommand::Backup { dst_file_path } => tokio_rt.block_on(
+            commands::handle_folders_backup_command(session_file, &dst_file_path),
+        )?,
+        _ => {
+            todo!();
+        }
+    }
+    Ok(())
+}
+
 fn do_main() -> Result<()> {
     let params = CliParams::parse();
     let tokio_rt = tokio::runtime::Builder::new_current_thread()
@@ -39,8 +56,8 @@ fn do_main() -> Result<()> {
         Command::Logout => {
             tokio_rt.block_on(commands::handle_logout_command(&params.session_file))?;
         }
-        _ => {
-            todo!();
+        Command::Folders(folders_cmd) => {
+            handle_folders_command(&tokio_rt, &params.session_file, folders_cmd)?;
         }
     }
     Ok(())

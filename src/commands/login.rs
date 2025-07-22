@@ -57,7 +57,7 @@ pub async fn handle_login_command(session_file: &path::Path) -> Result<()> {
     Ok(())
 }
 
-pub async fn handle_logout_command(session_file: &path::Path) -> Result<()> {
+pub async fn make_client_from_session_file(session_file: &path::Path) -> Result<Client> {
     let session = Session::load_file(session_file)?;
     let client = Client::connect(Config {
         session,
@@ -66,6 +66,11 @@ pub async fn handle_logout_command(session_file: &path::Path) -> Result<()> {
         params: Default::default(),
     })
     .await?;
+    Ok(client)
+}
+
+pub async fn handle_logout_command(session_file: &path::Path) -> Result<()> {
+    let client = make_client_from_session_file(session_file).await?;
     client.sign_out().await?;
     fs::remove_file(session_file)?;
     Ok(())
