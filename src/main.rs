@@ -25,6 +25,7 @@ enum Command {
 enum FoldersCommand {
     Backup { dst_file_path: path::PathBuf },
     Restore { src_file_path: path::PathBuf },
+    Clear,
 }
 
 fn handle_folders_command(
@@ -36,8 +37,11 @@ fn handle_folders_command(
         FoldersCommand::Backup { dst_file_path } => tokio_rt.block_on(
             commands::handle_folders_backup_command(session_file, &dst_file_path),
         )?,
-        _ => {
-            todo!();
+        FoldersCommand::Restore { src_file_path } => tokio_rt.block_on(
+            commands::handle_folders_restore_command(session_file, &src_file_path),
+        )?,
+        FoldersCommand::Clear => {
+            tokio_rt.block_on(commands::handle_folders_clear_command(session_file))?
         }
     }
     Ok(())

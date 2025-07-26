@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use serde_with::SerializeAs;
+use serde_with::{DeserializeAs, SerializeAs};
 
 use grammers_tl_types as tl_types;
 
@@ -14,11 +14,20 @@ macro_rules! impl_serialize_as {
                 <$local_type>::serialize(value, serializer)
             }
         }
+
+        impl<'a> DeserializeAs<'a, $remote_type> for $local_type {
+            fn deserialize_as<D>(deserializer: D) -> Result<$remote_type, D::Error>
+            where
+                D: serde::Deserializer<'a>,
+            {
+                <$local_type>::deserialize(deserializer)
+            }
+        }
     };
 }
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::InputPeerChat")]
 struct InputPeerChatDef {
     chat_id: i64,
@@ -27,7 +36,7 @@ struct InputPeerChatDef {
 impl_serialize_as!(tl_types::types::InputPeerChat, InputPeerChatDef);
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::InputPeerUser")]
 struct InputPeerUserDef {
     user_id: i64,
@@ -37,7 +46,7 @@ struct InputPeerUserDef {
 impl_serialize_as!(tl_types::types::InputPeerUser, InputPeerUserDef);
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::InputPeerChannel")]
 struct InputPeerChannelDef {
     channel_id: i64,
@@ -47,7 +56,7 @@ struct InputPeerChannelDef {
 impl_serialize_as!(tl_types::types::InputPeerChannel, InputPeerChannelDef);
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::InputPeerUserFromMessage")]
 struct InputPeerUserFromMessageDef {
     #[serde_as(as = "InputPeerDef")]
@@ -62,7 +71,7 @@ impl_serialize_as!(
 );
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::InputPeerChannelFromMessage")]
 struct InputPeerChannelFromMessageDef {
     #[serde_as(as = "InputPeerDef")]
@@ -77,7 +86,7 @@ impl_serialize_as!(
 );
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::enums::InputPeer")]
 enum InputPeerDef {
     Empty,
@@ -98,7 +107,7 @@ enum InputPeerDef {
 impl_serialize_as!(tl_types::enums::InputPeer, InputPeerDef);
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::DialogFilter")]
 struct DialogFilterTypeDef {
     contacts: bool,
@@ -124,7 +133,7 @@ struct DialogFilterTypeDef {
 impl_serialize_as!(tl_types::types::DialogFilter, DialogFilterTypeDef);
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::DialogFilterChatlist")]
 struct DialogFilterChatlistTypeDef {
     has_my_invites: bool,
@@ -144,7 +153,7 @@ impl_serialize_as!(
 );
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::enums::DialogFilter")]
 enum DialogFilterDef {
     Filter(#[serde_as(as = "DialogFilterTypeDef")] tl_types::types::DialogFilter),
@@ -155,7 +164,7 @@ enum DialogFilterDef {
 impl_serialize_as!(tl_types::enums::DialogFilter, DialogFilterDef);
 
 #[serde_as]
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(remote = "tl_types::types::messages::DialogFilters")]
 pub struct DialogFiltersDef {
     tags_enabled: bool,
