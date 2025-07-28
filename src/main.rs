@@ -3,6 +3,7 @@ use eyre::Result;
 use std::path;
 mod commands;
 mod serialization;
+mod utils;
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Tool for command-line interaction with Telegram")]
@@ -17,6 +18,8 @@ struct CliParams {
 enum Command {
     #[command(subcommand)]
     Folders(FoldersCommand),
+    #[command(subcommand)]
+    Dialogs(DialogsCommand),
     Login,
     Logout,
 }
@@ -26,6 +29,11 @@ enum FoldersCommand {
     Backup { dst_file_path: path::PathBuf },
     Restore { src_file_path: path::PathBuf },
     Clear,
+}
+
+#[derive(Debug, Subcommand)]
+enum DialogsCommand {
+    Assign { rules_file_path: path::PathBuf },
 }
 
 fn handle_folders_command(
@@ -47,6 +55,19 @@ fn handle_folders_command(
     Ok(())
 }
 
+fn handle_dialogs_command(
+    tokio_rt: &tokio::runtime::Runtime,
+    session_file: &path::Path,
+    dialogs_cmd: DialogsCommand,
+) -> Result<()> {
+    match dialogs_cmd {
+        DialogsCommand::Assign { rules_file_path } => tokio_rt.block_on(
+            commands::handle_dialogs_assign_command(session_file, &rules_file_path),
+        )?,
+    }
+    Ok(())
+}
+
 fn do_main() -> Result<()> {
     let params = CliParams::parse();
     let tokio_rt = tokio::runtime::Builder::new_current_thread()
@@ -62,6 +83,9 @@ fn do_main() -> Result<()> {
         }
         Command::Folders(folders_cmd) => {
             handle_folders_command(&tokio_rt, &params.session_file, folders_cmd)?;
+        }
+        Command::Dialogs(dialogs_cmd) => {
+            handle_dialogs_command(&tokio_rt, &params.session_file, dialogs_cmd)?;
         }
     }
     Ok(())
