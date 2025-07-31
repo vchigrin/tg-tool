@@ -3,6 +3,7 @@ use crate::utils;
 use eyre::Result;
 use grammers_tl_types as tl_types;
 use serde::Deserialize;
+use std::cell;
 use std::collections;
 use std::fs;
 use std::path;
@@ -22,6 +23,7 @@ struct ChatFilter {
 enum AssignCondition {
     //  AndCondition(AssignConditionAnd),
     TitleRegex(AssignConditionTitleRegex),
+    InfoRegex(AssignConditionInfoRegex),
     // DialogType(AssignConditionDialogType),
     // ContactPresent(AssignConditionContactPresent),
 }
@@ -45,22 +47,135 @@ struct AssignConditionTitleRegex {
     regex_match: regex::Regex,
 }
 
-fn condition_match(condition: &AssignCondition, dialog: &grammers_client::types::Dialog) -> bool {
+#[derive(Deserialize)]
+struct AssignConditionInfoRegex {
+    #[serde(with = "RegexDef")]
+    regex_match: regex::Regex,
+}
+
+struct DialogInfo {
+    dialog: grammers_client::types::Dialog,
+    tg_client: grammers_client::Client,
+    chat_full: cell::OnceCell<tl_types::enums::ChatFull>,
+}
+
+impl DialogInfo {
+    fn new(dialog: grammers_client::types::Dialog, tg_client: grammers_client::Client) -> Self {
+        Self {
+            dialog,
+            tg_client,
+            chat_full: cell::OnceCell::new(),
+        }
+    }
+
+    fn dialog(&self) -> &grammers_client::types::Dialog {
+        &self.dialog
+    }
+
+    async fn chat_full_impl(&self) -> Result<Option<grammers_tl_types::enums::ChatFull>> {
+        let tl_types::enums::messages::ChatFull::Full(full) = match &self.dialog.chat {
+            grammers_client::types::Chat::User(_) => {
+                return Ok(None);
+            }
+            grammers_client::types::Chat::Group(group) => match &group.raw {
+                tl_types::enums::Chat::Empty(_)
+                | tl_types::enums::Chat::Forbidden(_)
+                | tl_types::enums::Chat::ChannelForbidden(_) => {
+                    return Ok(None);
+                }
+                tl_types::enums::Chat::Chat(chat) => {
+                    self.tg_client
+                        .invoke(&tl_types::functions::messages::GetFullChat { chat_id: chat.id })
+                        .await?
+                }
+                tl_types::enums::Chat::Channel(channel) => {
+                    let inp_channel =
+                        tl_types::enums::InputChannel::Channel(tl_types::types::InputChannel {
+                            channel_id: channel.id,
+                            access_hash: channel.access_hash.unwrap(),
+                        });
+                    self.tg_client
+                        .invoke(&tl_types::functions::channels::GetFullChannel {
+                            channel: inp_channel,
+                        })
+                        .await?
+                }
+            },
+            grammers_client::types::Chat::Channel(channel) => {
+                let inp_channel =
+                    tl_types::enums::InputChannel::Channel(tl_types::types::InputChannel {
+                        channel_id: channel.id(),
+                        access_hash: channel.raw.access_hash.unwrap(),
+                    });
+                self.tg_client
+                    .invoke(&tl_types::functions::channels::GetFullChannel {
+                        channel: inp_channel,
+                    })
+                    .await?
+            }
+        };
+        Ok(Some(full.full_chat))
+    }
+
+    async fn chat_full(&self) -> Result<Option<&grammers_tl_types::enums::ChatFull>> {
+        if let Some(val) = self.chat_full.get() {
+            return Ok(Some(val));
+        }
+        if let Some(full) = self.chat_full_impl().await? {
+            self.chat_full.set(full).unwrap();
+        } else {
+            return Ok(None);
+        }
+        Ok(Some(self.chat_full.get().unwrap()))
+    }
+}
+
+fn get_about_string(chat_full: &tl_types::enums::ChatFull) -> &str {
+    match chat_full {
+        tl_types::enums::ChatFull::Full(full) => &full.about,
+        tl_types::enums::ChatFull::ChannelFull(full) => &full.about,
+    }
+}
+
+async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) -> bool {
     match condition {
-        AssignCondition::TitleRegex(regex_condition) => {
-            regex_condition.regex_match.is_match(dialog.chat().name())
+        AssignCondition::TitleRegex(regex_condition) => regex_condition
+            .regex_match
+            .is_match(dialog_info.dialog().chat().name()),
+        AssignCondition::InfoRegex(regex_condition) => {
+            let maybe_chat_full = match dialog_info.chat_full().await {
+                Ok(chat) => chat,
+                Err(e) => {
+                    println!(
+                        "Error {e:?} during ChatFullInfo fetching on dialog {:?}.",
+                        dialog_info.dialog()
+                    );
+                    return false;
+                }
+            };
+            match maybe_chat_full {
+                None => {
+                    // Mot probably this is dialog with user, not chat.
+                    false
+                }
+                Some(chat_full) => regex_condition
+                    .regex_match
+                    .is_match(get_about_string(chat_full)),
+            }
         }
     }
 }
 
-fn apply_rules<'a>(
+async fn apply_rules<'a>(
     filters: &'a ChatFilters,
-    dialog: &grammers_client::types::Dialog,
+    dialog_info: &DialogInfo,
 ) -> Option<&'a ChatFilter> {
-    filters
-        .chat_filters
-        .iter()
-        .find(|filter| condition_match(&filter.condition, dialog))
+    for filter in &filters.chat_filters {
+        if condition_match(&filter.condition, dialog_info).await {
+            return Some(filter);
+        }
+    }
+    None
 }
 
 async fn assign_peers(
@@ -100,8 +215,12 @@ pub async fn handle_dialogs_assign_command(
     let mut dialogs = tg_client.iter_dialogs();
     let mut filter_name_to_dialogs =
         collections::HashMap::<String, Vec<tl_types::enums::InputPeer>>::new();
+    let mut dialog_infos = Vec::new();
     while let Some(dialog) = dialogs.next().await? {
-        if let Some(filter) = apply_rules(&rules, &dialog) {
+        dialog_infos.push(DialogInfo::new(dialog, tg_client.clone()));
+    }
+    for dialog_info in &dialog_infos {
+        if let Some(filter) = apply_rules(&rules, dialog_info).await {
             let items: &mut Vec<tl_types::enums::InputPeer> =
                 if let Some(v) = filter_name_to_dialogs.get_mut(&filter.name) {
                     v
@@ -109,7 +228,7 @@ pub async fn handle_dialogs_assign_command(
                     filter_name_to_dialogs.insert(filter.name.clone(), Vec::new());
                     filter_name_to_dialogs.get_mut(&filter.name).unwrap()
                 };
-            items.push(dialog.chat().pack().to_input_peer());
+            items.push(dialog_info.dialog().chat().pack().to_input_peer());
         }
     }
     assign_peers(&tg_client, &filter_name_to_dialogs).await?;
