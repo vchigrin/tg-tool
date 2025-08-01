@@ -2,6 +2,7 @@ use super::login::make_client_from_session_file;
 use crate::utils;
 use eyre::Result;
 use grammers_tl_types as tl_types;
+use log::{error, info};
 use serde::Deserialize;
 use std::cell;
 use std::collections;
@@ -146,7 +147,7 @@ async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) 
             let maybe_chat_full = match dialog_info.chat_full().await {
                 Ok(chat) => chat,
                 Err(e) => {
-                    println!(
+                    error!(
                         "Error {e:?} during ChatFullInfo fetching on dialog {:?}.",
                         dialog_info.dialog()
                     );
@@ -216,10 +217,12 @@ pub async fn handle_dialogs_assign_command(
     let mut filter_name_to_dialogs =
         collections::HashMap::<String, Vec<tl_types::enums::InputPeer>>::new();
     let mut dialog_infos = Vec::new();
+    info!("Collecting dialogs");
     while let Some(dialog) = dialogs.next().await? {
         dialog_infos.push(DialogInfo::new(dialog, tg_client.clone()));
     }
-    for dialog_info in &dialog_infos {
+    for (idx, dialog_info) in dialog_infos.iter().enumerate() {
+        info!("Processing dialog {} of {}", idx + 1, dialog_infos.len());
         if let Some(filter) = apply_rules(&rules, dialog_info).await {
             let items: &mut Vec<tl_types::enums::InputPeer> =
                 if let Some(v) = filter_name_to_dialogs.get_mut(&filter.name) {

@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use eyre::Result;
+use log::{error, info};
 use std::path;
 mod commands;
 mod serialization;
@@ -92,12 +93,14 @@ fn do_main() -> Result<()> {
 }
 
 fn main() {
+    simple_logger::init_with_level(log::Level::Info).unwrap();
+
     match do_main() {
         Ok(_) => {
-            println!("Success")
+            info!("Success")
         }
         Err(e) => {
-            println!("Error {e}");
+            error!("Error {e}");
             std::process::exit(1);
         }
     }

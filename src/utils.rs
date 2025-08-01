@@ -1,5 +1,6 @@
 use eyre::Result;
 use grammers_tl_types as tl_types;
+use log::error;
 
 pub async fn get_dialog_filters(
     tg_client: &grammers_client::Client,
@@ -176,11 +177,10 @@ pub async fn apply_dialog_filters(
                 id: current_filter_id,
                 filter: Some(merged_filter),
             };
-            println!("Sending update {update_request:?}");
             match tg_client.invoke(&update_request).await {
                 Ok(_) => {}
                 Err(error) => {
-                    println!("Error during updating filter");
+                    error!("Error during updating filter");
                     maybe_error = Some(error);
                 }
             }
@@ -191,11 +191,10 @@ pub async fn apply_dialog_filters(
                 id: new_filter_id,
                 filter: Some(saved_filter.clone()),
             };
-            println!("Sending create {create_request:?}");
             match tg_client.invoke(&create_request).await {
                 Ok(_) => {}
                 Err(error) => {
-                    println!("Error during creating filter");
+                    error!("Error during creating filter");
                     maybe_error = Some(error);
                 }
             }
