@@ -25,7 +25,7 @@ enum AssignCondition {
     //  AndCondition(AssignConditionAnd),
     TitleRegex(AssignConditionTitleRegex),
     InfoRegex(AssignConditionInfoRegex),
-    // DialogType(AssignConditionDialogType),
+    DialogType(AssignConditionDialogType),
     ContactPresent(AssignConditionContactPresent),
 }
 
@@ -57,6 +57,18 @@ struct AssignConditionInfoRegex {
 #[derive(Deserialize)]
 struct AssignConditionContactPresent {
     login: String,
+}
+
+#[derive(Deserialize, PartialEq)]
+enum DialogType {
+    User,
+    Group,
+    Channel,
+}
+
+#[derive(Deserialize)]
+struct AssignConditionDialogType {
+    dialog_type: DialogType,
 }
 
 struct DialogInfo {
@@ -202,6 +214,23 @@ async fn chat_contact_present(
     false
 }
 
+fn chat_dialog_type_match(
+    dialog_type_info: &AssignConditionDialogType,
+    dialog_info: &DialogInfo,
+) -> bool {
+    match dialog_info.dialog().chat() {
+        grammers_client::types::chat::Chat::User(_) => {
+            dialog_type_info.dialog_type == DialogType::User
+        }
+        grammers_client::types::chat::Chat::Group(_) => {
+            dialog_type_info.dialog_type == DialogType::Group
+        }
+        grammers_client::types::chat::Chat::Channel(_) => {
+            dialog_type_info.dialog_type == DialogType::Channel
+        }
+    }
+}
+
 async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) -> bool {
     match condition {
         AssignCondition::TitleRegex(condition_info) => {
@@ -212,6 +241,9 @@ async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) 
         }
         AssignCondition::ContactPresent(condition_info) => {
             chat_contact_present(condition_info, dialog_info).await
+        }
+        AssignCondition::DialogType(condition_info) => {
+            chat_dialog_type_match(condition_info, dialog_info)
         }
     }
 }
@@ -271,8 +303,14 @@ pub async fn handle_dialogs_assign_command(
         dialog_infos.push(DialogInfo::new(dialog, tg_client.clone()));
     }
     for (idx, dialog_info) in dialog_infos.iter().enumerate() {
-        info!("Processing dialog {} of {}", idx + 1, dialog_infos.len());
+        info!(
+            "Processing dialog {} of {} ({})",
+            idx + 1,
+            dialog_infos.len(),
+            dialog_info.dialog().chat.name()
+        );
         if let Some(filter) = apply_rules(&rules, dialog_info).await {
+            info!("Assigned to folder {}", filter.name);
             let items: &mut Vec<tl_types::enums::InputPeer> =
                 if let Some(v) = filter_name_to_dialogs.get_mut(&filter.name) {
                     v
