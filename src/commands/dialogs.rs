@@ -2,7 +2,7 @@ use super::login::make_client_from_session_file;
 use crate::utils;
 use eyre::Result;
 use grammers_tl_types as tl_types;
-use log::{error, info};
+use log::{error, info, warn};
 use serde::Deserialize;
 use std::cell;
 use std::collections;
@@ -26,7 +26,7 @@ enum AssignCondition {
     TitleRegex(AssignConditionTitleRegex),
     InfoRegex(AssignConditionInfoRegex),
     // DialogType(AssignConditionDialogType),
-    // ContactPresent(AssignConditionContactPresent),
+    ContactPresent(AssignConditionContactPresent),
 }
 
 struct RegexDef {}
@@ -54,6 +54,11 @@ struct AssignConditionInfoRegex {
     regex_match: regex::Regex,
 }
 
+#[derive(Deserialize)]
+struct AssignConditionContactPresent {
+    login: String,
+}
+
 struct DialogInfo {
     dialog: grammers_client::types::Dialog,
     tg_client: grammers_client::Client,
@@ -71,6 +76,10 @@ impl DialogInfo {
 
     fn dialog(&self) -> &grammers_client::types::Dialog {
         &self.dialog
+    }
+
+    fn participants(&self) -> grammers_client::client::chats::ParticipantIter {
+        self.tg_client.iter_participants(self.dialog.chat())
     }
 
     async fn chat_full_impl(&self) -> Result<Option<grammers_tl_types::enums::ChatFull>> {
@@ -138,31 +147,71 @@ fn get_about_string(chat_full: &tl_types::enums::ChatFull) -> &str {
     }
 }
 
+fn chat_title_match(regex_info: &AssignConditionTitleRegex, dialog_info: &DialogInfo) -> bool {
+    regex_info
+        .regex_match
+        .is_match(dialog_info.dialog().chat().name())
+}
+
+async fn chat_info_match(regex_info: &AssignConditionInfoRegex, dialog_info: &DialogInfo) -> bool {
+    let maybe_chat_full = match dialog_info.chat_full().await {
+        Ok(chat) => chat,
+        Err(e) => {
+            error!(
+                "Error {e:?} during ChatFullInfo fetching on dialog {:?}.",
+                dialog_info.dialog()
+            );
+            return false;
+        }
+    };
+    match maybe_chat_full {
+        None => {
+            // Most probably this is dialog with user, not chat.
+            false
+        }
+        Some(chat_full) => regex_info.regex_match.is_match(get_about_string(chat_full)),
+    }
+}
+
+async fn chat_contact_present(
+    contact_info: &AssignConditionContactPresent,
+    dialog_info: &DialogInfo,
+) -> bool {
+    let mut participants_iter = dialog_info.participants();
+    loop {
+        let participant_or_error = participants_iter.next().await;
+        let maybe_participant = match participant_or_error {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(
+                    "Failed to enumerate participants on chat {} error {}",
+                    dialog_info.dialog().chat().name(),
+                    e
+                );
+                return false;
+            }
+        };
+        if let Some(participant) = maybe_participant {
+            if participant.user.username() == Some(&contact_info.login) {
+                return true;
+            }
+        } else {
+            break;
+        }
+    }
+    false
+}
+
 async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) -> bool {
     match condition {
-        AssignCondition::TitleRegex(regex_condition) => regex_condition
-            .regex_match
-            .is_match(dialog_info.dialog().chat().name()),
-        AssignCondition::InfoRegex(regex_condition) => {
-            let maybe_chat_full = match dialog_info.chat_full().await {
-                Ok(chat) => chat,
-                Err(e) => {
-                    error!(
-                        "Error {e:?} during ChatFullInfo fetching on dialog {:?}.",
-                        dialog_info.dialog()
-                    );
-                    return false;
-                }
-            };
-            match maybe_chat_full {
-                None => {
-                    // Mot probably this is dialog with user, not chat.
-                    false
-                }
-                Some(chat_full) => regex_condition
-                    .regex_match
-                    .is_match(get_about_string(chat_full)),
-            }
+        AssignCondition::TitleRegex(condition_info) => {
+            chat_title_match(condition_info, dialog_info)
+        }
+        AssignCondition::InfoRegex(condition_info) => {
+            chat_info_match(condition_info, dialog_info).await
+        }
+        AssignCondition::ContactPresent(condition_info) => {
+            chat_contact_present(condition_info, dialog_info).await
         }
     }
 }
