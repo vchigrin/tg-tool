@@ -1,6 +1,6 @@
 use super::login::make_client_from_session_file;
 use crate::utils;
-use eyre::Result;
+use eyre::{eyre, Result};
 use grammers_tl_types as tl_types;
 use log::{error, info, warn};
 use serde::Deserialize;
@@ -22,7 +22,9 @@ struct ChatFilter {
 
 #[derive(Deserialize)]
 enum AssignCondition {
-    //  AndCondition(AssignConditionAnd),
+    And(AssignConditionComposite),
+    Or(AssignConditionComposite),
+    Not(Box<AssignCondition>),
     TitleRegex(AssignConditionTitleRegex),
     InfoRegex(AssignConditionInfoRegex),
     DialogType(AssignConditionDialogType),
@@ -69,6 +71,11 @@ enum DialogType {
 #[derive(Deserialize)]
 struct AssignConditionDialogType {
     dialog_type: DialogType,
+}
+
+#[derive(Deserialize)]
+struct AssignConditionComposite {
+    children: Vec<AssignCondition>,
 }
 
 struct DialogInfo {
@@ -231,6 +238,30 @@ fn chat_dialog_type_match(
     }
 }
 
+async fn chat_and_conditions(
+    condition_info: &AssignConditionComposite,
+    dialog_info: &DialogInfo,
+) -> bool {
+    for child in &condition_info.children {
+        if !Box::pin(condition_match(child, dialog_info)).await {
+            return false;
+        }
+    }
+    true
+}
+
+async fn chat_or_conditions(
+    condition_info: &AssignConditionComposite,
+    dialog_info: &DialogInfo,
+) -> bool {
+    for child in &condition_info.children {
+        if Box::pin(condition_match(child, dialog_info)).await {
+            return true;
+        }
+    }
+    false
+}
+
 async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) -> bool {
     match condition {
         AssignCondition::TitleRegex(condition_info) => {
@@ -244,6 +275,15 @@ async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) 
         }
         AssignCondition::DialogType(condition_info) => {
             chat_dialog_type_match(condition_info, dialog_info)
+        }
+        AssignCondition::And(condition_info) => {
+            chat_and_conditions(condition_info, dialog_info).await
+        }
+        AssignCondition::Or(condition_info) => {
+            chat_or_conditions(condition_info, dialog_info).await
+        }
+        AssignCondition::Not(child_condition) => {
+            !Box::pin(condition_match(child_condition, dialog_info)).await
         }
     }
 }
@@ -292,7 +332,8 @@ pub async fn handle_dialogs_assign_command(
 ) -> Result<()> {
     let f_in = fs::File::open(rules_file_path)?;
     let mut des = serde_json::Deserializer::from_reader(f_in);
-    let rules = ChatFilters::deserialize(&mut des)?;
+    let rules =
+        ChatFilters::deserialize(&mut des).map_err(|e| eyre!("Failed parse rules file; {}", e))?;
     let tg_client = make_client_from_session_file(session_file).await?;
     let mut dialogs = tg_client.iter_dialogs();
     let mut filter_name_to_dialogs =
