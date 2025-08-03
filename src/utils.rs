@@ -65,7 +65,7 @@ fn merge_peer_lists(
     new_items: &Vec<tl_types::enums::InputPeer>,
 ) {
     for item in new_items {
-        if updated.contains(item) {
+        if !updated.contains(item) {
             updated.push(item.clone());
         }
     }
