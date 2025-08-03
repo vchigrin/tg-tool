@@ -8,6 +8,7 @@ use std::cell;
 use std::collections;
 use std::fs;
 use std::path;
+use std::process;
 
 #[derive(Deserialize)]
 struct ChatFilters {
@@ -29,6 +30,7 @@ enum AssignCondition {
     InfoRegex(AssignConditionInfoRegex),
     DialogType(AssignConditionDialogType),
     ContactPresent(AssignConditionContactPresent),
+    ExternalExecutable(AssignConditionExternalExecutable),
 }
 
 struct RegexDef {}
@@ -76,6 +78,12 @@ struct AssignConditionDialogType {
 #[derive(Deserialize)]
 struct AssignConditionComposite {
     children: Vec<AssignCondition>,
+}
+
+#[derive(Deserialize)]
+struct AssignConditionExternalExecutable {
+    path: String,
+    params: Vec<String>,
 }
 
 struct DialogInfo {
@@ -262,6 +270,67 @@ async fn chat_or_conditions(
     false
 }
 
+fn is_placeholder(param: &str) -> bool {
+    param.starts_with('@') && param.ends_with('@')
+}
+
+fn placeholder_value(placeholder: &str, dialog_info: &DialogInfo) -> Option<String> {
+    let chat = dialog_info.dialog().chat();
+    if placeholder == "@user_login@" {
+        match chat {
+            grammers_client::types::Chat::User(user) => user.username().map(|s| s.to_owned()),
+            _ => None,
+        }
+    } else if placeholder == "@id@" {
+        Some(chat.id().to_string())
+    } else if placeholder == "@channel_login@" {
+        match chat {
+            grammers_client::types::Chat::Channel(channel) => {
+                channel.username().map(|s| s.to_owned())
+            }
+            _ => None,
+        }
+    } else if placeholder == "@group_login@" {
+        match chat {
+            grammers_client::types::Chat::Group(group) => group.username().map(|s| s.to_owned()),
+            _ => None,
+        }
+    } else {
+        error!("Unknown placeholder {placeholder}");
+        None
+    }
+}
+
+fn chat_external_executable_check(
+    condition_info: &AssignConditionExternalExecutable,
+    dialog_info: &DialogInfo,
+) -> bool {
+    let mut resolved_params = Vec::new();
+    for param in &condition_info.params {
+        if is_placeholder(param) {
+            if let Some(value) = placeholder_value(param, dialog_info) {
+                resolved_params.push(value)
+            } else {
+                return false;
+            }
+        } else {
+            resolved_params.push(param.to_owned());
+        }
+    }
+    let expanded = shellexpand::tilde(&condition_info.path);
+
+    let status = process::Command::new(expanded.to_string())
+        .args(resolved_params)
+        .status();
+    match status {
+        Err(e) => {
+            error!("Failed execute {:?}; error {}", condition_info.path, e);
+            false
+        }
+        Ok(status) => status.success(),
+    }
+}
+
 async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) -> bool {
     match condition {
         AssignCondition::TitleRegex(condition_info) => {
@@ -284,6 +353,9 @@ async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) 
         }
         AssignCondition::Not(child_condition) => {
             !Box::pin(condition_match(child_condition, dialog_info)).await
+        }
+        AssignCondition::ExternalExecutable(condition_info) => {
+            chat_external_executable_check(condition_info, dialog_info)
         }
     }
 }
