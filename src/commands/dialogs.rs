@@ -10,10 +10,7 @@ use std::fs;
 use std::path;
 use std::process;
 
-#[derive(Deserialize)]
-struct ChatFilters {
-    chat_filters: Vec<ChatFilter>,
-}
+type ChatFilters = Vec<ChatFilter>;
 
 #[derive(Deserialize)]
 struct ChatFilter {
@@ -378,7 +375,7 @@ async fn apply_rules<'a>(
     dialog_info: &DialogInfo,
 ) -> Vec<&'a ChatFilter> {
     let mut result = Vec::new();
-    for filter in &filters.chat_filters {
+    for filter in filters {
         if condition_match(&filter.condition, dialog_info).await {
             dialog_info.set_has_matched_filters();
             result.push(filter);
