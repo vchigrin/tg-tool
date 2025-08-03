@@ -10,12 +10,18 @@ use std::path;
 pub async fn handle_folders_backup_command(
     session_file: &path::Path,
     dst_file_path: &path::Path,
+    pretty: bool,
 ) -> Result<()> {
     let tg_client = make_client_from_session_file(session_file).await?;
     let filters = utils::get_dialog_filters(&tg_client).await?;
     let f_out = fs::File::create(dst_file_path)?;
-    let mut ser = serde_json::Serializer::new(f_out);
-    serialization::DialogFiltersDef::serialize(&filters, &mut ser)?;
+    if pretty {
+        let mut ser = serde_json::Serializer::pretty(f_out);
+        serialization::DialogFiltersDef::serialize(&filters, &mut ser)?;
+    } else {
+        let mut ser = serde_json::Serializer::new(f_out);
+        serialization::DialogFiltersDef::serialize(&filters, &mut ser)?;
+    }
     Ok(())
 }
 

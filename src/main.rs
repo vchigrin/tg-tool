@@ -27,8 +27,14 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum FoldersCommand {
-    Backup { dst_file_path: path::PathBuf },
-    Restore { src_file_path: path::PathBuf },
+    Backup {
+        #[arg(long)]
+        pretty: bool,
+        dst_file_path: path::PathBuf,
+    },
+    Restore {
+        src_file_path: path::PathBuf,
+    },
     Clear,
 }
 
@@ -43,9 +49,14 @@ fn handle_folders_command(
     folders_cmd: FoldersCommand,
 ) -> Result<()> {
     match folders_cmd {
-        FoldersCommand::Backup { dst_file_path } => tokio_rt.block_on(
-            commands::handle_folders_backup_command(session_file, &dst_file_path),
-        )?,
+        FoldersCommand::Backup {
+            dst_file_path,
+            pretty,
+        } => tokio_rt.block_on(commands::handle_folders_backup_command(
+            session_file,
+            &dst_file_path,
+            pretty,
+        ))?,
         FoldersCommand::Restore { src_file_path } => tokio_rt.block_on(
             commands::handle_folders_restore_command(session_file, &src_file_path),
         )?,
