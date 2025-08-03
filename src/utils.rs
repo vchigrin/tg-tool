@@ -1,6 +1,9 @@
 use eyre::Result;
 use grammers_tl_types as tl_types;
-use log::error;
+use log::{error, warn};
+
+const PEER_COUNT_FREE_LIMIT: usize = 100;
+const PEER_COUNT_PREMIUM_LIMIT: usize = 200;
 
 pub async fn get_dialog_filters(
     tg_client: &grammers_client::Client,
@@ -147,6 +150,19 @@ fn merge_filters(
     }
 }
 
+fn warn_if_neccessary(saved_filter: &tl_types::enums::DialogFilter) {
+    let peers_count = match saved_filter {
+        tl_types::enums::DialogFilter::Filter(filter) => filter.include_peers.len(),
+        tl_types::enums::DialogFilter::Default => 0,
+        tl_types::enums::DialogFilter::Chatlist(filter) => filter.include_peers.len(),
+    };
+    if peers_count > PEER_COUNT_FREE_LIMIT {
+        warn!("Filter {} has {} peers. Note that free Telegram account has limit to {} peers, and premium to {}",
+            get_filter_title(saved_filter).unwrap_or(""),
+            peers_count, PEER_COUNT_FREE_LIMIT, PEER_COUNT_PREMIUM_LIMIT);
+    }
+}
+
 /// Updates filters in the Telegram  based on desired_filters.
 /// If some filters with same names already present, attempts merge their
 /// contents.
@@ -173,6 +189,7 @@ pub async fn apply_dialog_filters(
             };
             let mut merged_filter = merge_filters(current_filter, saved_filter);
             set_filter_id(&mut merged_filter, current_filter_id);
+            warn_if_neccessary(&merged_filter);
             let update_request = tl_types::functions::messages::UpdateDialogFilter {
                 id: current_filter_id,
                 filter: Some(merged_filter),
@@ -191,6 +208,7 @@ pub async fn apply_dialog_filters(
                 id: new_filter_id,
                 filter: Some(saved_filter.clone()),
             };
+            warn_if_neccessary(saved_filter);
             match tg_client.invoke(&create_request).await {
                 Ok(_) => {}
                 Err(error) => {
