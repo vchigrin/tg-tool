@@ -42,7 +42,7 @@ pub async fn handle_login_command(session_file: &path::Path) -> Result<()> {
                 //       Real code might want to use a better way to handle this.
                 let hint = password_token.hint().unwrap_or("None");
                 let prompt_message = format!("Enter the password (hint {}): ", &hint);
-                let password = prompt(prompt_message.as_str())?;
+                let password = rpassword::prompt_password(prompt_message).unwrap();
 
                 client
                     .check_password(password_token, password.trim())
