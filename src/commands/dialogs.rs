@@ -31,6 +31,8 @@ enum AssignCondition {
     DialogType(AssignConditionDialogType),
     ContactPresent(AssignConditionContactPresent),
     ExternalExecutable(AssignConditionExternalExecutable),
+    // Note, for this filters order of filters in rules file is important
+    NotMatched,
 }
 
 struct RegexDef {}
@@ -90,6 +92,7 @@ struct DialogInfo {
     dialog: grammers_client::types::Dialog,
     tg_client: grammers_client::Client,
     chat_full: cell::OnceCell<tl_types::enums::ChatFull>,
+    has_matched_filters: cell::OnceCell<bool>,
 }
 
 impl DialogInfo {
@@ -98,6 +101,7 @@ impl DialogInfo {
             dialog,
             tg_client,
             chat_full: cell::OnceCell::new(),
+            has_matched_filters: cell::OnceCell::new(),
         }
     }
 
@@ -164,6 +168,14 @@ impl DialogInfo {
             return Ok(None);
         }
         Ok(Some(self.chat_full.get().unwrap()))
+    }
+
+    fn has_matched_filters(&self) -> bool {
+        *self.has_matched_filters.get().unwrap_or(&false)
+    }
+
+    fn set_has_matched_filters(&self) {
+        let _ = self.has_matched_filters.set(true);
     }
 }
 
@@ -357,6 +369,7 @@ async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) 
         AssignCondition::ExternalExecutable(condition_info) => {
             chat_external_executable_check(condition_info, dialog_info)
         }
+        AssignCondition::NotMatched => !dialog_info.has_matched_filters(),
     }
 }
 
@@ -367,6 +380,7 @@ async fn apply_rules<'a>(
     let mut result = Vec::new();
     for filter in &filters.chat_filters {
         if condition_match(&filter.condition, dialog_info).await {
+            dialog_info.set_has_matched_filters();
             result.push(filter);
         }
     }
