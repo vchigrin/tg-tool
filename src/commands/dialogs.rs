@@ -19,6 +19,7 @@ struct ChatFilter {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum AssignCondition {
     And(AssignConditionComposite),
     Or(AssignConditionComposite),
