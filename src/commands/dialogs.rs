@@ -363,13 +363,14 @@ async fn condition_match(condition: &AssignCondition, dialog_info: &DialogInfo) 
 async fn apply_rules<'a>(
     filters: &'a ChatFilters,
     dialog_info: &DialogInfo,
-) -> Option<&'a ChatFilter> {
+) -> Vec<&'a ChatFilter> {
+    let mut result = Vec::new();
     for filter in &filters.chat_filters {
         if condition_match(&filter.condition, dialog_info).await {
-            return Some(filter);
+            result.push(filter);
         }
     }
-    None
+    result
 }
 
 async fn assign_peers(
@@ -422,7 +423,8 @@ pub async fn handle_dialogs_assign_command(
             dialog_infos.len(),
             dialog_info.dialog().chat.name()
         );
-        if let Some(filter) = apply_rules(&rules, dialog_info).await {
+        let matched_filters = apply_rules(&rules, dialog_info).await;
+        for filter in matched_filters {
             info!("Assigned to folder {}", filter.name);
             let items: &mut Vec<tl_types::enums::InputPeer> =
                 if let Some(v) = filter_name_to_dialogs.get_mut(&filter.name) {
