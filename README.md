@@ -27,7 +27,7 @@ Takes .json file, created by "folders backup" command, and attempts restore fold
 Takes .json file with description of assignment rules, and assign dialogs to folders based on them. See information about rules for dialog assignment below.
 
 ## Rules for dialogs assignment
-Rules file is file with JSON array of dicts, each specify rules, each specifying name for dialog filter and condition for assignment dialogs. Same dialog may be assigned to more then one folder.
+Rules file is file with JSON array of dicts, each specify rules, each specifying name for dialog filter and condition for assignment dialogs. Same dialog may be assigned to more then one folder. Note that these assignment rules are not supported by Telegram engine, so they will not be applied to new dialogs automatically. It is neccessary re-run this tool again to assign new dialogs.
 Example:
 ```json
 [
