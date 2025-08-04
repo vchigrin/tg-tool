@@ -2,7 +2,9 @@ use eyre::Result;
 use grammers_client::{session::Session, Client, Config, SignInError};
 use std::fs;
 use std::io;
-use std::io::BufRead;
+use std::io::{BufRead, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path;
 
 const API_ID: i32 = match i32::from_str_radix(env!("TG_ID"), 10) {
@@ -52,8 +54,12 @@ pub async fn handle_login_command(session_file: &path::Path) -> Result<()> {
             Err(e) => panic!("{}", e),
         }
     }
-    fs::File::create(session_file)?;
-    client.session().save_to_file(session_file)?;
+    let mut file = fs::File::create(session_file)?;
+    #[cfg(unix)]
+    file.set_permissions(fs::Permissions::from_mode(0o600))?;
+    file.set_len(0)?;
+    file.write_all(&client.session().save())?;
+    file.sync_data()?;
     Ok(())
 }
 
