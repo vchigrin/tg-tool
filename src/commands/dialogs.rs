@@ -300,9 +300,19 @@ fn placeholder_value(placeholder: &str, dialog_info: &DialogInfo) -> Option<Stri
             }
             _ => None,
         }
+    } else if placeholder == "@channel_title@" {
+        match chat {
+            grammers_client::types::Chat::Channel(channel) => Some(channel.title().to_owned()),
+            _ => None,
+        }
     } else if placeholder == "@group_login@" {
         match chat {
             grammers_client::types::Chat::Group(group) => group.username().map(|s| s.to_owned()),
+            _ => None,
+        }
+    } else if placeholder == "@group_title@" {
+        match chat {
+            grammers_client::types::Chat::Group(group) => Some(group.title().to_owned()),
             _ => None,
         }
     } else {

@@ -62,7 +62,9 @@ Below description of rules and their attributes:
  - `params` - array of strings with command line arguments to pass during program invokation. Some elements may be "placeholder" strings, replaced by info of particular dialog.
      - `"@user_login@"` - replaced by login of the user, if this dialog with user. For other dialogs does not match.
      - `"@group_login@"` - replaced by login of the group, if this dialog with group which have one. For other dialogs does not match.
+     - `"@group_title@"` - replaced by title of the group. For other dialogs does not match.
      - `"@channel_login@"` - replaced by login of the channel, if this dialog is subscription to channel with provided login. For other dialogs does not match.
+     - `"@channel_title@"` - replaced by title of the channel. For other dialogs does not match.
      - `"@id@"` - replaced by numerical ID of the user/group/channel.
 
 ### not
