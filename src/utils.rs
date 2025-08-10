@@ -197,7 +197,7 @@ pub async fn apply_dialog_filters(
             match tg_client.invoke(&update_request).await {
                 Ok(_) => {}
                 Err(error) => {
-                    error!("Error during updating filter");
+                    error!("Error updating filter {update_request:?}");
                     maybe_error = Some(error);
                 }
             }
@@ -212,7 +212,7 @@ pub async fn apply_dialog_filters(
             match tg_client.invoke(&create_request).await {
                 Ok(_) => {}
                 Err(error) => {
-                    error!("Error during creating filter");
+                    error!("Error creating filter {create_request:?}");
                     maybe_error = Some(error);
                 }
             }

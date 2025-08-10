@@ -10,6 +10,9 @@ use std::fs;
 use std::path;
 use std::process;
 
+// Found experimentally.
+const FOLDER_TITLE_LEN_LIMIT: usize = 12;
+
 type ChatFilters = Vec<ChatFilter>;
 
 #[derive(Deserialize)]
@@ -421,6 +424,22 @@ async fn assign_peers(
     utils::apply_dialog_filters(tg_client, &desired_filters).await
 }
 
+fn validate_rules(filters: &ChatFilters) -> Result<()> {
+    let mut wrong_filter_names = Vec::new();
+    for filter in filters {
+        if filter.name.len() > FOLDER_TITLE_LEN_LIMIT {
+            wrong_filter_names.push(format!("\"{}\"", filter.name));
+        }
+    }
+    if !wrong_filter_names.is_empty() {
+        let joined = wrong_filter_names.join(", ");
+        return Err(eyre!(
+            "Filter names {joined} exceed Telegram limit of {FOLDER_TITLE_LEN_LIMIT} symbols"
+        ));
+    }
+    Ok(())
+}
+
 pub async fn handle_dialogs_assign_command(
     session_file: &path::Path,
     rules_file_path: &path::Path,
@@ -429,6 +448,7 @@ pub async fn handle_dialogs_assign_command(
     let mut des = serde_json::Deserializer::from_reader(f_in);
     let rules =
         ChatFilters::deserialize(&mut des).map_err(|e| eyre!("Failed parse rules file; {}", e))?;
+    validate_rules(&rules)?;
     let tg_client = make_client_from_session_file(session_file).await?;
     let mut dialogs = tg_client.iter_dialogs();
     let mut filter_name_to_dialogs =
